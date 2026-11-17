@@ -69,8 +69,8 @@ for agent_cli in herdr codex claude gemini opencode pi copilot; do
 done
 python3 scripts/terminal_probe.py --herdr -- ssh -tt -p "$test_port" -i "$test_dir/client" -o BatchMode=yes -o UserKnownHostsFile="$test_dir/known_hosts" -o HostKeyAlias=deeler-test agent@127.0.0.1 herdr
 created=$(remote 'herdr workspace create --cwd /home/agent/projects --label verification --no-focus')
-workspace=$(printf '%s' "$created" | jq -er '.result.workspace.workspace_id')
-pane=$(printf '%s' "$created" | jq -er '.result.root_pane.pane_id')
+workspace=$(printf '%s' "$created" | jq -er '.result.workspace.workspace_id // .result.workspace.id')
+pane=$(printf '%s' "$created" | jq -er '.result.root_pane.pane_id // .result.root_pane.id')
 remote "herdr pane run '$pane' 'sleep 20'" >/dev/null
 renamed=false
 for attempt in {1..15}; do

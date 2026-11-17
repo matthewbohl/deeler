@@ -62,6 +62,10 @@ jobs:
       - name: Release identifier
         id: release
         run: echo "id=$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - name: Check the resolved artifact before upload
+        env:
+          DEELER_PRIVATE_PATTERNS: ${{ secrets.DEELER_PRIVATE_PATTERNS }}
+        run: python3 scripts/privacy_check.py
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: candidate-versions
@@ -120,7 +124,11 @@ jobs:
         run: bash scripts/smoke-test.sh deeler:candidate "$PREVIOUS_IMAGE"
       - name: Store tested candidate by immutable digest
         if: github.event_name != 'pull_request'
+        env:
+          DEELER_PRIVATE_PATTERNS: ${{ secrets.DEELER_PRIVATE_PATTERNS }}
         run: |
+          docker inspect --format '{{json .Config}}' deeler:candidate > candidate-image-config.json
+          python3 scripts/privacy_check.py
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/deeler"
           tag="$image:candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}"
           docker tag deeler:candidate "$tag"
