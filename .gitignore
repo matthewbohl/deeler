@@ -3,3 +3,7 @@ authorized_keys
 **/authorized_keys
 *.tar.gz
 .DS_Store
+__pycache__/
+previous/
+release/
+digests/

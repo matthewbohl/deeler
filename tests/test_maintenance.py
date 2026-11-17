@@ -1,0 +1,43 @@
+import copy
+from pathlib import Path
+import sys
+import unittest
+import urllib.request
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
+from resolve_versions import fingerprint
+from privacy_check import findings
+from github_api import SafeRedirect
+
+
+class MaintenanceTests(unittest.TestCase):
+    def test_daily_timestamp_does_not_trigger_rebuild(self):
+        old = {'resolved_at': 'yesterday', 'os_refresh': '2026-W47', 'agents': {'pi': '1'}}
+        new = copy.deepcopy(old)
+        new['resolved_at'] = 'today'
+        self.assertEqual(fingerprint(old), fingerprint(new))
+        new['agents']['pi'] = '2'
+        self.assertNotEqual(fingerprint(old), fingerprint(new))
+
+    def test_week_change_triggers_full_refresh(self):
+        old = {'os_refresh': '2026-W47'}
+        self.assertNotEqual(fingerprint(old), fingerprint({'os_refresh': '2026-W48'}))
+
+    def test_private_deployment_values_are_rejected(self):
+        # Synthetic values assembled here keep the checked-in fixture generic.
+        self.assertIn('private network address', findings('10.' + '2.3.4'))
+        self.assertIn('private machine name', findings('workstation.' + 'internal'))
+        self.assertIn('personal filesystem path', findings('/' + 'Users/' + 'person/project/'))
+        self.assertIn('non-example SSH hostname', findings('HostName ' + 'host.invalid'))
+        self.assertEqual(findings('HostName agents.example.com\n127.0.0.1'), [])
+
+    def test_artifact_redirect_does_not_leak_token(self):
+        original = urllib.request.Request('https://api.github.com/artifact', headers={'Authorization': 'Bearer synthetic'})
+        redirected = SafeRedirect().redirect_request(original, None, 302, '', {}, 'https://artifacts.example.com/file')
+        self.assertFalse(redirected.has_header('Authorization'))
+        same_host = SafeRedirect().redirect_request(original, None, 302, '', {}, 'https://api.github.com/next')
+        self.assertTrue(same_host.has_header('Authorization'))
+
+
+if __name__ == '__main__':
+    unittest.main()

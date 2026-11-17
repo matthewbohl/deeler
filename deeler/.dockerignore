@@ -5,3 +5,5 @@
 !sshd_config
 !supervisord.conf
 !entrypoint.sh
+!versions.json
+!install_tools.py

@@ -1,77 +1,229 @@
-name: Build and publish deeler
+name: Update, verify, and publish deeler
 
 on:
+  schedule:
+    - cron: '23 9 * * *'
   push:
     branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild even when upstream versions have not changed
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: deeler-${{ github.ref }}
-  cancel-in-progress: true
+  group: deeler-update-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  smoke-test:
-    runs-on: ubuntu-latest
+  discover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      build: ${{ steps.resolve.outputs.build }}
+      base: ${{ steps.resolve.outputs.base }}
+      os_refresh: ${{ steps.resolve.outputs.os_refresh }}
+      previous: ${{ steps.previous.outputs.image }}
+      release: ${{ steps.release.outputs.id }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
-          context: ./deeler
-          load: true
-          tags: deeler:smoke
-          cache-from: type=gha,scope=smoke
-          cache-to: type=gha,mode=max,scope=smoke
-      - name: Test agent binaries, SSH, persistence, and restart
-        run: bash scripts/smoke-test.sh deeler:smoke
+          fetch-depth: 0
+      - name: Privacy and regression checks
+        env:
+          DEELER_PRIVATE_PATTERNS: ${{ secrets.DEELER_PRIVATE_PATTERNS }}
+        run: |
+          python3 scripts/privacy_check.py
+          python3 -m unittest discover -s tests -v
+      - name: Previous passing release
+        id: previous
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/previous_release.py
+      - name: Resolve current stable versions
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || inputs.force == true }}
+        run: |
+          args=()
+          if [[ "$FORCE" == true ]]; then args+=(--force); fi
+          python3 scripts/resolve_versions.py --previous previous/versions.json "${args[@]}"
+      - name: Release identifier
+        id: release
+        run: echo "id=$(date -u +%Y%m%dT%H%M%SZ)-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-versions
+          path: deeler/versions.json
+          retention-days: 30
 
-  publish:
-    if: github.event_name != 'pull_request'
-    needs: smoke-test
-    runs-on: ubuntu-latest
+  verify:
+    needs: discover
+    if: needs.discover.outputs.build == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-      - name: Image tags
-        id: image
-        shell: bash
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: candidate-versions
+          path: deeler
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build candidate on native hardware
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: ./deeler
+          load: true
+          pull: true
+          tags: deeler:candidate
+          build-args: |
+            BASE_IMAGE=${{ needs.discover.outputs.base }}
+            OS_REFRESH=${{ needs.discover.outputs.os_refresh }}
+          labels: |
+            org.opencontainers.image.title=deeler
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ needs.discover.outputs.release }}
+          cache-from: type=gha,scope=agents-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=agents-${{ matrix.arch }}
+      - name: Native CLI, terminal, SSH, Herdr, persistence, and upgrade checks
+        env:
+          PREVIOUS_IMAGE: ${{ needs.discover.outputs.previous }}
+        run: bash scripts/smoke-test.sh deeler:candidate "$PREVIOUS_IMAGE"
+      - name: Store tested candidate by immutable digest
+        if: github.event_name != 'pull_request'
         run: |
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/deeler"
-          {
-            echo 'tags<<EOF'
-            echo "$image:sha-$GITHUB_SHA"
-            if [[ "$GITHUB_REF" == refs/heads/main ]]; then
-              echo "$image:latest"
-            elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-              echo "$image:${GITHUB_REF_NAME#v}"
-            fi
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
+          tag="$image:candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${{ matrix.arch }}"
+          docker tag deeler:candidate "$tag"
+          docker push "$tag"
+          mkdir -p digests
+          docker inspect --format '{{index .RepoDigests 0}}' "$tag" > digests/${{ matrix.arch }}.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name != 'pull_request'
+        with:
+          name: digest-${{ matrix.arch }}
+          path: digests/*.txt
+          retention-days: 30
+
+  canaries:
+    needs: [discover, verify]
+    if: github.event_name != 'pull_request' && vars.DEELER_CANARY_AGENTS != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: digest-amd64
+          path: digests
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+      - name: Optional bounded authenticated checks
+        env:
+          DEELER_CANARY_AGENTS: ${{ vars.DEELER_CANARY_AGENTS }}
+          CODEX_API_KEY: ${{ secrets.DEELER_CANARY_CODEX_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.DEELER_CANARY_CLAUDE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.DEELER_CANARY_GEMINI_KEY }}
+          OPENCODE_CANARY_KEY: ${{ secrets.DEELER_CANARY_OPENCODE_KEY }}
+          PI_CANARY_KEY: ${{ secrets.DEELER_CANARY_PI_KEY }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.DEELER_CANARY_COPILOT_TOKEN }}
+          OPENCODE_CANARY_MODEL: ${{ vars.DEELER_CANARY_OPENCODE_MODEL }}
+          PI_CANARY_MODEL: ${{ vars.DEELER_CANARY_PI_MODEL }}
+        run: python3 scripts/canaries.py "$(cat digests/amd64.txt)"
+
+  promote:
+    needs: [discover, verify, canaries]
+    if: >-
+      !cancelled() && github.event_name != 'pull_request' &&
+      needs.verify.result == 'success' &&
+      (needs.canaries.result == 'success' || needs.canaries.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          context: ./deeler
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.image.outputs.tags }}
-          labels: |
-            org.opencontainers.image.title=deeler
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: |
-            type=gha,scope=smoke
-            type=gha,scope=publish
-          cache-to: type=gha,mode=max,scope=publish
+          pattern: digest-*
+          path: digests
+          merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: candidate-versions
+          path: release
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Promote only tested digests
+        env:
+          RELEASE_ID: ${{ needs.discover.outputs.release }}
+          PREVIOUS_IMAGE: ${{ needs.discover.outputs.previous }}
+          CANARY_RESULT: ${{ needs.canaries.result }}
+        run: bash scripts/promote.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-manifest
+          path: release/*.json
+          retention-days: 90
+      - name: Release report
+        run: |
+          echo '### Verified deeler release' >> "$GITHUB_STEP_SUMMARY"
+          cat release/release.json >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          cat release/versions.json >> "$GITHUB_STEP_SUMMARY"
+
+  report:
+    needs: [discover, verify, canaries, promote]
+    if: always() && !cancelled() && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Maintain one failure issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JOB_RESULTS: ${{ toJSON(needs) }}
+        run: python3 scripts/report_update.py
