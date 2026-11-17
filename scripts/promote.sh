@@ -17,7 +17,7 @@ d=json.load(open('/tmp/release-index.json'))
 actual={(m['platform']['os'],m['platform']['architecture']) for m in d['manifests']}
 assert {('linux','amd64'),('linux','arm64')} <= actual, 'Missing tested platform'
 PY
-digest=$(docker buildx imagetools inspect "$release_tag" --format '{{json .Manifest.Digest}}' | tr -d '"')
+digest=$(docker buildx imagetools inspect "$release_tag" --format '{{json .Manifest}}' | jq -er '.digest')
 [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
 export DEELER_RELEASE_IMAGE="$image@$digest"
 python3 - <<'PY'
