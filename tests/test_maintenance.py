@@ -8,9 +8,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 from resolve_versions import fingerprint
 from privacy_check import findings
 from github_api import SafeRedirect
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'deeler'))
+from version_check import reported_version
 
 
 class MaintenanceTests(unittest.TestCase):
+    def test_cli_banner_punctuation_is_not_part_of_version(self):
+        self.assertEqual(reported_version('GitHub Copilot CLI 1.0.113.\n'), '1.0.113')
+        self.assertEqual(reported_version('\x1b[32m0.73.1\x1b[0m\n'), '0.73.1')
+        self.assertEqual(reported_version('0.73.10'), '0.73.10')
+        self.assertIsNone(reported_version('no version'))
+
     def test_daily_timestamp_does_not_trigger_rebuild(self):
         old = {'resolved_at': 'yesterday', 'os_refresh': '2026-W47', 'agents': {'pi': '1'}}
         new = copy.deepcopy(old)

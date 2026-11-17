@@ -3,10 +3,10 @@
 import hashlib
 import json
 import os
-import re
 from pathlib import Path
 import subprocess
 import urllib.request
+from version_check import reported_version
 
 
 def run(command, timeout=120):
@@ -47,7 +47,7 @@ for name in ('herdr', *manifest['agents']):
     print(f'Checking {name}', flush=True)
     result = subprocess.check_output(['gosu', 'agent', name, '--version'], text=True, stderr=subprocess.STDOUT, timeout=90)
     expected = manifest['herdr']['version'] if name == 'herdr' else manifest['agents'][name]['version']
-    if not re.search(r'(?<![\d.])' + re.escape(expected) + r'(?![\d.])', result):
-        reported = re.findall(r'\b\d+\.\d+\.\d+\b', result)
-        raise RuntimeError(f'{name}: expected {expected}; reported versions: {reported}')
+    actual_version = reported_version(result)
+    if actual_version != expected:
+        raise RuntimeError(f'{name}: expected {expected}; reported {actual_version}')
     print(f'{name}: {expected}', flush=True)
