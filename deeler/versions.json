@@ -21,8 +21,8 @@
       "version": "2.3.0"
     },
     "pi": {
-      "package": "@mariozechner/pi-coding-agent",
-      "version": "0.73.1"
+      "package": "@earendil-works/pi-coding-agent",
+      "version": "1.5.2"
     }
   },
   "base_image": "node:24-bookworm-slim@sha256:dc26ae92c9fb15cf6b1d63e20f0944b2efe0f115b20e00be48fb23fceb061c54",
@@ -44,6 +44,6 @@
     "channel": "v0.15.0",
     "ref": "a99754357fdea3119c430fd0cad822eef9047895"
   },
-  "resolved_at": "2026-11-17T19:41:38.019318+00:00",
+  "resolved_at": "2026-11-17T19:53:13.095306+00:00",
   "schema": 1
 }

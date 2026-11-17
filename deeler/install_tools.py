@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import urllib.request
@@ -28,7 +29,11 @@ run(['gosu', 'agent', 'npm', 'install', '-g', '--no-audit', '--no-fund', *packag
 run(['gosu', 'agent', 'npm', 'cache', 'clean', '--force'])
 run(['chown', '-R', 'root:root', '/opt/agent-tools'])
 for name in manifest['agents']:
-    os.symlink('/opt/agent-tools/bin/' + name, '/usr/local/bin/' + name)
+    wrapper = Path('/usr/local/bin/' + name)
+    wrapper.write_text('#!/bin/sh\n'
+                       'export DISABLE_AUTOUPDATER=1 COPILOT_AUTO_UPDATE=false PI_SKIP_VERSION_CHECK=1\n'
+                       'exec "/opt/agent-tools/bin/' + name + '" "$@"\n')
+    wrapper.chmod(0o755)
 plugin = '/opt/herdr-automatic-rename'
 ref = manifest['rename']['ref']
 run(['git', 'init', plugin])
@@ -40,8 +45,9 @@ if actual != ref:
     raise RuntimeError('Plugin revision mismatch')
 for name in ('herdr', *manifest['agents']):
     print(f'Checking {name}', flush=True)
-    result = subprocess.check_output(['gosu', 'agent', name, '--version'], text=True, timeout=90)
+    result = subprocess.check_output(['gosu', 'agent', name, '--version'], text=True, stderr=subprocess.STDOUT, timeout=90)
     expected = manifest['herdr']['version'] if name == 'herdr' else manifest['agents'][name]['version']
-    if expected not in result:
-        raise RuntimeError(f'{name}: installed version does not match snapshot')
+    if not re.search(r'(?<![\d.])' + re.escape(expected) + r'(?![\d.])', result):
+        reported = re.findall(r'\b\d+\.\d+\.\d+\b', result)
+        raise RuntimeError(f'{name}: expected {expected}; reported versions: {reported}')
     print(f'{name}: {expected}', flush=True)

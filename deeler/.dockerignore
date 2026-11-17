@@ -7,3 +7,5 @@
 !entrypoint.sh
 !versions.json
 !install_tools.py
+!gemini-settings.json
+!opencode-settings.json

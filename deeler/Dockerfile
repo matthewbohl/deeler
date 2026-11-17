@@ -16,6 +16,8 @@ RUN test -n "$OS_REFRESH" \
     && chown agent:agent /opt/agent-tools
 
 ENV NPM_CONFIG_PREFIX=/opt/agent-tools HOME=/home/agent
+COPY gemini-settings.json /etc/gemini-cli/settings.json
+COPY opencode-settings.json /etc/opencode/opencode.json
 COPY versions.json install_tools.py /opt/deeler/
 RUN python3 /opt/deeler/install_tools.py
 

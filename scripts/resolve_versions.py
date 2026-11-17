@@ -12,7 +12,7 @@ import urllib.request
 PACKAGES = {
     'codex': '@openai/codex', 'claude': '@anthropic-ai/claude-code',
     'gemini': '@google/gemini-cli', 'opencode': '@opencode/cli',
-    'pi': '@mariozechner/pi-coding-agent', 'copilot': '@github/copilot',
+    'pi': '@earendil-works/pi-coding-agent', 'copilot': '@github/copilot',
 }
 
 
