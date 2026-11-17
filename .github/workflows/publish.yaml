@@ -15,36 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  remove-original-run:
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Remove original pre-sanitization run and its logs
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          api="https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/44156651896"
-          for attempt in {1..12}; do
-            code=$(curl -sS -o /tmp/original-run.json -w '%{http_code}' \
-              -H "Authorization: Bearer $GH_TOKEN" "$api")
-            if [[ "$code" == 404 ]]; then exit 0; fi
-            if [[ "$code" != 200 ]]; then echo "Run lookup failed: $code"; exit 1; fi
-            if [[ "$(jq -r .status /tmp/original-run.json)" == completed ]]; then
-              curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" "$api"
-              exit 0
-            fi
-            curl -sS -o /dev/null -X POST -H "Authorization: Bearer $GH_TOKEN" "$api/cancel"
-            sleep 5
-          done
-          echo 'Original workflow has not stopped yet.' >&2
-          exit 1
-
   smoke-test:
-    needs: remove-original-run
-    if: always() && (needs.remove-original-run.result == 'success' || needs.remove-original-run.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

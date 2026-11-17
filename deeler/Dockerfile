@@ -46,6 +46,9 @@ RUN npm install -g \
 USER root
 ENV PATH="/opt/agent-tools/bin:${PATH}"
 RUN chown -R root:root /opt/agent-tools \
+    && for agent_cli in codex claude gemini opencode pi copilot; do \
+         ln -s "/opt/agent-tools/bin/$agent_cli" "/usr/local/bin/$agent_cli"; \
+       done \
     && git init /opt/herdr-automatic-rename \
     && git -C /opt/herdr-automatic-rename remote add origin https://github.com/qu8n/herdr-automatic-rename.git \
     && git -C /opt/herdr-automatic-rename fetch --depth=1 origin "$RENAME_REF" \
