@@ -1,0 +1,7 @@
+*
+!Dockerfile
+!config.toml
+!bashrc
+!sshd_config
+!supervisord.conf
+!entrypoint.sh

@@ -1,0 +1,22 @@
+Port 22
+ListenAddress 0.0.0.0
+HostKey /var/lib/herdr-ssh/ssh_host_ed25519_key
+PidFile /run/sshd.pid
+PermitRootLogin no
+AllowUsers agent
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+UsePAM no
+AuthorizedKeysFile /etc/ssh/authorized_keys/agent
+StrictModes yes
+AllowAgentForwarding no
+AllowTcpForwarding local
+GatewayPorts no
+X11Forwarding no
+PermitTunnel no
+PermitUserEnvironment no
+PrintMotd no
+Subsystem sftp internal-sftp

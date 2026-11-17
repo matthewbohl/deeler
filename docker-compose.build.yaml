@@ -1,0 +1,8 @@
+# Optional local build; the main Compose file pulls the published image.
+# docker compose -f docker-compose.yaml -f docker-compose.build.yaml up -d --build
+services:
+  herdr:
+    build:
+      context: ./deeler
+    image: deeler:local
+    pull_policy: build

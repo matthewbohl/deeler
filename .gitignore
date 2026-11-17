@@ -1,0 +1,5 @@
+.env
+authorized_keys
+**/authorized_keys
+*.tar.gz
+.DS_Store

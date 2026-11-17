@@ -1,0 +1,35 @@
+services:
+  herdr:
+    image: "${DEELER_IMAGE:?Set DEELER_IMAGE to your published registry image}"
+    pull_policy: always
+    init: true
+    restart: unless-stopped
+    hostname: deeler
+    ports:
+      - "${HERDR_BIND_ADDRESS:-0.0.0.0}:${HERDR_SSH_PORT:-2222}:22"
+    volumes:
+      - herdr-agent-home:/home/agent
+      - herdr-ssh-host-keys:/var/lib/herdr-ssh
+      - type: bind
+        source: "${HERDR_AUTHORIZED_KEYS_FILE:-./authorized_keys}"
+        target: /run/herdr-authorized-keys
+        read_only: true
+        bind:
+          create_host_path: false
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD-SHELL", "gosu agent herdr status server >/dev/null 2>&1 && /usr/sbin/sshd -t && test -s /run/sshd.pid && kill -0 $$(cat /run/sshd.pid)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  herdr-agent-home:
+  herdr-ssh-host-keys:

@@ -1,0 +1,7 @@
+# Loaded by SSH login shells and new Herdr panes.
+export PATH="/opt/agent-tools/bin:/usr/local/bin:$PATH"
+export HERDR_PROCESS_DETECTION=child-groups
+export DISABLE_AUTOUPDATER=1
+if [ -r /opt/herdr-automatic-rename/shell/hook.bash ]; then
+    source /opt/herdr-automatic-rename/shell/hook.bash
+fi
