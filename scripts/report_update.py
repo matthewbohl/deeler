@@ -19,6 +19,6 @@ if failed:
         request(matches[0]['url'], {'body': body}, 'PATCH')
     else:
         request(root + '/issues', {'title': title, 'body': body}, 'POST')
-else:
+elif states.get('promote', {}).get('result') == 'success':
     for issue in matches:
         request(issue['url'], {'state': 'closed', 'state_reason': 'completed'}, 'PATCH')

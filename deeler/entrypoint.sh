@@ -38,7 +38,7 @@ for integration in claude codex opencode pi copilot; do
     herdr integration install "$integration"
 done
 # Gemini has screen-state detection but no built-in integration in Herdr 0.9.5.
-herdr plugin link --enabled /opt/herdr-automatic-rename
+herdr plugin link /opt/herdr-automatic-rename --enabled
 BOOTSTRAP
 
 /usr/sbin/sshd -t

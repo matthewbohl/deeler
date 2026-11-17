@@ -12,6 +12,7 @@ RULES = {
     'private machine name': re.compile(r'\b[\w-]+\.(?:local|lan|internal)\b', re.I),
     'private key': re.compile(r'-----BEGIN (?:OPENSSH |RSA |EC )?PRIVATE KEY-----'),
     'credential token': re.compile(r'\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[A-Z0-9]{16})\b'),
+    'provider API key': re.compile(r'\b(?:sk-[A-Za-z0-9_-]{24,}|AIza[A-Za-z0-9_-]{30,})\b'),
 }
 
 def findings(text):

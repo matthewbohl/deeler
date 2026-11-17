@@ -13,7 +13,8 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
 
 def request(url, data=None, method=None):
     headers = {'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
-               'User-Agent': 'deeler-maintenance', 'Accept': 'application/vnd.github+json'}
+               'User-Agent': 'deeler-maintenance', 'Accept': 'application/vnd.github+json',
+               'Content-Type': 'application/json'}
     body = None if data is None else json.dumps(data).encode()
     req = urllib.request.Request(url, data=body, headers=headers, method=method)
     with urllib.request.build_opener(SafeRedirect()).open(req, timeout=45) as response:
