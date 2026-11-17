@@ -87,6 +87,7 @@ remote 'herdr plugin list'
 remote 'test -f ~/.claude/hooks/herdr-agent-state.sh && test -f ~/.codex/herdr-agent-state.sh && test -f ~/.pi/agent/extensions/herdr-agent-state.ts && test -f ~/.copilot/hooks/herdr-agent-state.sh && test -d ~/.config/opencode/plugins'
 remote 'printf persistent > ~/projects/smoke-marker'
 docker restart -t 60 "$test_name"
+test_port=$(docker port "$test_name" 22/tcp | sed 's/.*://')
 ready
 # The same known_hosts file requires SSH identity to survive the restart.
 remote 'test "$(cat ~/projects/smoke-marker)" = persistent'
